@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
+import mammoth from 'mammoth/mammoth.browser';
 import { processMeeting } from '../api';
 import { ClipboardPaste, UploadCloud, FileText, Zap, Loader2, Play } from 'lucide-react';
 import './InputPage.css';
@@ -28,17 +29,59 @@ export default function InputPage({ onProcessed }) {
     const [fileName, setFileName] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [isDragging, setIsDragging] = useState(false);
+    const fileInputRef = useRef(null);
 
-    const handleFile = (e) => {
-        const file = e.target.files[0];
+    const readFileAsText = async (file) => {
+        const extension = file.name.split('.').pop().toLowerCase();
+
+        if (extension === 'docx') {
+            const arrayBuffer = await file.arrayBuffer();
+            const result = await mammoth.extractRawText({ arrayBuffer });
+            return result.value;
+        }
+
+        return file.text();
+    };
+
+    const handleFile = async (file) => {
         if (!file) return;
         setFileName(file.name);
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-            setNotes(ev.target.result);
+
+        try {
+            const text = await readFileAsText(file);
+            setNotes(text);
             setTab('paste');
-        };
-        reader.readAsText(file);
+            setError('');
+        } catch (err) {
+            setError('Could not read that file. Use .txt, .vtt, or .docx.');
+        }
+    };
+
+    const handleFileInputChange = async (e) => {
+        const file = e.target.files[0];
+        await handleFile(file);
+        e.target.value = '';
+    };
+
+    const handleDrop = async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(false);
+        const file = e.dataTransfer.files[0];
+        await handleFile(file);
+    };
+
+    const handleDragOver = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(true);
+    };
+
+    const handleDragLeave = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(false);
     };
 
     const handleProcess = async () => {
@@ -95,20 +138,27 @@ export default function InputPage({ onProcessed }) {
                         placeholder="Paste your meeting notes, transcript, or minutes here…"
                     />
                 ) : (
-                    <div className="upload-zone" onClick={() => document.getElementById('file-input').click()}>
+                    <div
+                        className={`upload-zone ${isDragging ? 'dragging' : ''}`}
+                        onClick={() => fileInputRef.current?.click()}
+                        onDrop={handleDrop}
+                        onDragOver={handleDragOver}
+                        onDragEnter={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                    >
                         <div className="upload-icon">
                             <FileText size={48} strokeWidth={1.5} color="var(--primary)" />
                         </div>
-                        <p>Click to upload a <strong>.txt</strong> or <strong>.vtt</strong> file</p>
-                        <span>Max 500KB · plain text or WebVTT transcript</span>
+                        <p>Click or drop to upload a <strong>.txt</strong>, <strong>.vtt</strong>, or <strong>.docx</strong> file</p>
+                        <span>Plain text, WebVTT transcript, or Word document</span>
                         {fileName && <div className="file-name">
                             <FileText size={14} /> {fileName}
                         </div>}
                         <input
                             type="file"
-                            id="file-input"
-                            accept=".txt,.vtt"
-                            onChange={handleFile}
+                            ref={fileInputRef}
+                            accept=".txt,.vtt,.docx"
+                            onChange={handleFileInputChange}
                             style={{ display: 'none' }}
                         />
                     </div>
