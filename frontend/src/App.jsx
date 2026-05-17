@@ -1,16 +1,28 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import Topbar from './components/Topbar';
 import InputPage from './pages/InputPage';
 import Dashboard from './pages/Dashboard';
 import ChatPage from './pages/ChatPage';
 import ExportPage from './pages/ExportPage';
+import { fetchMeetings } from './api/meetingService';
 import './App.css';
 
 export default function App() {
     const [page, setPage] = useState('input');
     const [meetings, setMeetings] = useState([]);
     const [currentMeeting, setCurrentMeeting] = useState(null);
+
+    // Fetch stored meetings on mount
+    useEffect(() => {
+        const loadMeetings = async () => {
+            const { data, error } = await fetchMeetings();
+            if (!error && data) {
+                setMeetings(data);
+            }
+        };
+        loadMeetings();
+    }, []);
 
     const handleMeetingProcessed = (meeting) => {
         setMeetings(prev => [meeting, ...prev]);

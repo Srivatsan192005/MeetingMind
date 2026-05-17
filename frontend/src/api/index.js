@@ -1,17 +1,33 @@
 import axios from 'axios';
 
-const defaultBaseURL = 'http://127.0.0.1:5000/api';
-const configuredBaseURL =
-    (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_BASE_URL) ||
-    defaultBaseURL;
+const resolveDefaultBaseURL = () => {
+    if (typeof window !== 'undefined' && window.location?.hostname) {
+        const host = window.location.hostname;
+        // If frontend is opened via LAN IP, use the same host for backend calls.
+        if (host && host !== 'localhost' && host !== '127.0.0.1') {
+            return `http://${host}:5000/api`;
+        }
+    }
+
+    return 'http://127.0.0.1:5000/api';
+};
+
+const envBaseURL =
+    (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_BASE_URL) || '';
+const configuredBaseURL = envBaseURL.trim() || resolveDefaultBaseURL();
 
 const api = axios.create({ baseURL: configuredBaseURL });
 
 export const processMeeting = (notes) =>
     api.post('/process', { notes }).then(r => r.data);
 
-export const generateEmail = (meetingId) =>
-    api.post('/email', { meeting_id: meetingId }).then(r => r.data);
+export const generateEmail = (meeting) => {
+    if (meeting && typeof meeting === 'object' && !Array.isArray(meeting)) {
+        return api.post('/email', meeting).then(r => r.data);
+    }
+
+    return api.post('/email', { meeting_id: meeting }).then(r => r.data);
+};
 
 export const sendChatMessage = (meetingId, messages) =>
     api.post('/chat', { meeting_id: meetingId, messages }).then(r => r.data);

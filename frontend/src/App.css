@@ -172,6 +172,22 @@ button, textarea, input {
   font-weight: 600;
 }
 
+.topbar-btn {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid transparent;
+  padding: 8px;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+}
+
+.topbar-btn:hover {
+  background: var(--bg-surface-hover);
+  color: var(--text-main);
+  border-color: var(--border-color);
+}
+
 /* Common Buttons */
 button {
   border: 0;

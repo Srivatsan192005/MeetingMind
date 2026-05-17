@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { generateEmail } from '../api';
+import { storeMeeting } from '../api/meetingService';
 import { 
     BarChart2, Download, Mail, FileText, CheckCircle, 
     User, Calendar, Zap, Copy, RefreshCw, X, Loader2,
@@ -33,14 +34,26 @@ function Accordion({ title, icon: Icon, iconClass, count, defaultOpen = false, c
 function EmailModal({ meeting, onClose }) {
     const [email, setEmail] = useState('');
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
 
     const fetchEmail = async () => {
         setLoading(true);
+        setError('');
         try {
-            const data = await generateEmail(meeting.id);
+            const data = await generateEmail({
+                title: meeting.title,
+                raw: meeting.raw,
+                summary: meeting.result?.summary || '',
+                action_items: meeting.result?.action_items || [],
+                decisions: meeting.result?.decisions || [],
+            });
+            if (!data.email) {
+                throw new Error('No email draft was returned by the backend.');
+            }
             setEmail(data.email);
-        } catch {
-            setEmail('Failed to generate email. Please try again.');
+        } catch (err) {
+            setEmail('');
+            setError(err?.response?.data?.error || err?.message || 'Failed to generate email. Please try again.');
         } finally {
             setLoading(false);
         }
@@ -60,6 +73,10 @@ function EmailModal({ meeting, onClose }) {
                         <div className="modal-loading">
                             <Loader2 className="spinner-lucide text-primary" size={32} />
                             <span>Drafting your email…</span>
+                        </div>
+                    ) : error ? (
+                        <div className="error-banner" style={{ margin: 0 }}>
+                            {error}
                         </div>
                     ) : (
                         <pre className="email-content">{email}</pre>
@@ -186,6 +203,9 @@ function TranscriptViewer({ raw }) {
 export default function Dashboard({ meeting }) {
     const [doneTasks, setDoneTasks] = useState(new Set());
     const [emailOpen, setEmailOpen] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [saveError, setSaveError] = useState('');
+    const [saveSuccess, setSaveSuccess] = useState('');
 
     if (!meeting) {
         return (
@@ -200,6 +220,17 @@ export default function Dashboard({ meeting }) {
     }
 
     const { result, raw } = meeting;
+    const summaryText = typeof result.summary === 'string'
+        ? result.summary
+        : result.summary?.overview || '';
+    const actionItems = (result.action_items || []).map((item) => ({
+        description: item.description || item.task || '',
+        assignee: item.assignee || item.owner || null,
+        deadline: item.deadline || null,
+    }));
+    const decisions = (result.decisions && result.decisions.length > 0)
+        ? result.decisions
+        : (result.summary?.key_decisions || []);
     const toggleTask = (i) => {
         setDoneTasks(prev => {
             const next = new Set(prev);
@@ -216,6 +247,32 @@ export default function Dashboard({ meeting }) {
         a.click();
     };
 
+    const handleStoreInSupabase = async () => {
+        setSaving(true);
+        setSaveError('');
+        setSaveSuccess('');
+
+        try {
+            const payload = {
+                title: meeting.title,
+                raw: meeting.raw,
+                ...meeting.result,
+                full_meeting_json: meeting,
+            };
+
+            const { error } = await storeMeeting(payload);
+            if (error) {
+                throw error;
+            }
+
+            setSaveSuccess('Meeting stored in Supabase.');
+        } catch (err) {
+            setSaveError(err?.message || 'Failed to store meeting in Supabase.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
     return (
         <div className="dashboard">
             {emailOpen && <EmailModal meeting={meeting} onClose={() => setEmailOpen(false)} />}
@@ -224,12 +281,15 @@ export default function Dashboard({ meeting }) {
                 <div>
                     <h2>{meeting.title}</h2>
                     <p className="dash-subtitle">
-                        {result.action_items?.length || 0} action items · {result.decisions?.length || 0} decisions
+                        {actionItems.length} action items · {decisions.length} decisions
                     </p>
                 </div>
                 <div className="dash-actions">
                     <button className="btn-secondary" onClick={downloadJson}>
                         <Download size={16} /> JSON
+                    </button>
+                    <button className="btn-secondary" onClick={handleStoreInSupabase} disabled={saving}>
+                        {saving ? <><Loader2 className="spinner-lucide" size={16} /> Storing...</> : 'Store in Supabase'}
                     </button>
                     <button className="btn-primary" onClick={() => setEmailOpen(true)}>
                         <Mail size={16} /> Draft follow-up email
@@ -237,16 +297,19 @@ export default function Dashboard({ meeting }) {
                 </div>
             </div>
 
+            {saveError && <div className="error-banner" style={{ marginTop: 12 }}>{saveError}</div>}
+            {saveSuccess && <div className="error-banner" style={{ marginTop: 12, background: '#ecfdf3', color: '#166534', borderColor: '#bbf7d0' }}>{saveSuccess}</div>}
+
             <HighlightCards highlights={result.highlights} />
 
             <div className="accordions-grid">
                 <Accordion title="Summary" icon={FileText} iconClass="card-icon-blue" defaultOpen={true}>
-                    <p className="card-text">{result.summary}</p>
+                    <p className="card-text">{summaryText}</p>
                 </Accordion>
 
-                <Accordion title="Action Items" icon={CheckCircle} iconClass="card-icon-green" count={result.action_items?.length || 0} defaultOpen={true}>
+                <Accordion title="Action Items" icon={CheckCircle} iconClass="card-icon-green" count={actionItems.length} defaultOpen={true}>
                     <div className="action-list">
-                        {(result.action_items || []).map((a, i) => (
+                        {actionItems.map((a, i) => (
                             <div key={i} className={`action-item ${doneTasks.has(i) ? 'done' : ''}`}>
                                 <div className="action-row">
                                     <button className="check-box" onClick={() => toggleTask(i)}>
@@ -273,9 +336,9 @@ export default function Dashboard({ meeting }) {
                     </div>
                 </Accordion>
 
-                <Accordion title="Decisions" icon={Zap} iconClass="card-icon-purple" count={result.decisions?.length || 0}>
+                <Accordion title="Decisions" icon={Zap} iconClass="card-icon-purple" count={decisions.length}>
                     <div className="decision-list">
-                        {(result.decisions || []).map((d, i) => (
+                        {decisions.map((d, i) => (
                             <div key={i} className="decision-item">
                                 <div className="decision-dot" />
                                 <p>{d}</p>

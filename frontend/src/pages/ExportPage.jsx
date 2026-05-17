@@ -4,16 +4,29 @@ import './ExportPage.css';
 
 function buildMarkdown(meeting) {
     const r = meeting.result;
-    let md = `# ${meeting.title}\n\n## Summary\n${r.summary}\n\n`;
+    const title = meeting.title || 'Meeting';
+    const summaryText = typeof r.summary === 'string'
+        ? r.summary
+        : r.summary?.overview || '';
+    const actionItems = (r.action_items || []).map((item) => ({
+        description: item.description || item.task || '',
+        assignee: item.assignee || item.owner || null,
+        deadline: item.deadline || null,
+    }));
+    const decisions = (r.decisions && r.decisions.length > 0)
+        ? r.decisions
+        : (r.summary?.key_decisions || []);
+
+    let md = `# ${title}\n\n## Summary\n${summaryText}\n\n`;
     md += `## Action Items\n`;
-    (r.action_items || []).forEach(a => {
+    actionItems.forEach(a => {
         md += `- [ ] **${a.description}**`;
         if (a.assignee) md += ` — *${a.assignee}*`;
         if (a.deadline) md += ` (due: ${a.deadline})`;
         md += '\n';
     });
     md += `\n## Decisions\n`;
-    (r.decisions || []).forEach(d => { md += `- ${d}\n`; });
+    decisions.forEach(d => { md += `- ${d}\n`; });
     return md;
 }
 
@@ -55,7 +68,7 @@ export default function ExportPage({ meeting }) {
                         <button className="btn-secondary" onClick={() => navigator.clipboard.writeText(md)}>
                             <Copy size={16} /> Copy
                         </button>
-                        <button className="btn-secondary" onClick={() => download(md, meeting.title.replace(/\s+/g, '_') + '.md', 'text/markdown')}>
+                        <button className="btn-secondary" onClick={() => download(md, (meeting.title || 'meeting').replace(/\s+/g, '_') + '.md', 'text/markdown')}>
                             <DownloadIcon size={16} /> Download .md
                         </button>
                     </div>
@@ -70,7 +83,7 @@ export default function ExportPage({ meeting }) {
                         <button className="btn-secondary" onClick={() => navigator.clipboard.writeText(json)}>
                             <Copy size={16} /> Copy
                         </button>
-                        <button className="btn-secondary" onClick={() => download(json, meeting.title.replace(/\s+/g, '_') + '.json', 'application/json')}>
+                        <button className="btn-secondary" onClick={() => download(json, (meeting.title || 'meeting').replace(/\s+/g, '_') + '.json', 'application/json')}>
                             <DownloadIcon size={16} /> Download .json
                         </button>
                     </div>
