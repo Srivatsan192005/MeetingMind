@@ -14,21 +14,79 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app)
 
-api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
-MODEL = os.getenv("GEMINI_MODEL", "models/gemini-2.5-flash")
-if not MODEL.startswith("models/"):
-    MODEL = f"models/{MODEL}"
+GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
+
+
+def _normalize_gemini_model(name: str) -> str:
+    cleaned = (name or "").strip()
+    if not cleaned:
+        return ""
+    return cleaned if cleaned.startswith("models/") else f"models/{cleaned}"
+
+
+def _parse_model_spec(spec: str) -> dict:
+    raw = (spec or "").strip()
+    if not raw:
+        return {}
+    if ":" not in raw:
+        return {"provider": "gemini", "model": _normalize_gemini_model(raw)}
+
+    provider, model = raw.split(":", 1)
+    provider = provider.strip().lower()
+    model = model.strip()
+    if provider == "gemini":
+        model = _normalize_gemini_model(model)
+    return {"provider": provider, "model": model}
+
+
+def _load_model_pool() -> list:
+    env_list = os.getenv("AI_MODEL_POOL", "").strip()
+    if env_list:
+        entries = [_parse_model_spec(item) for item in env_list.split(",")]
+    else:
+        entries = [
+            {"provider": "openai", "model": "gpt-4.1-mini"},
+            {"provider": "groq", "model": "llama-3.1-70b-versatile"},
+            {"provider": "gemini", "model": _normalize_gemini_model(os.getenv("GEMINI_MODEL", "models/gemini-2.5-flash"))},
+            {"provider": "mistral", "model": "mistral-large-latest"},
+        ]
+
+    deduped = []
+    seen = set()
+    for entry in entries:
+        provider = (entry.get("provider") or "").strip().lower()
+        model = (entry.get("model") or "").strip()
+        if not provider or not model:
+            continue
+        key = f"{provider}:{model}"
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append({"provider": provider, "model": model})
+
+    if len(deduped) > 4:
+        deduped = deduped[:4]
+
+    if not deduped:
+        deduped = [{"provider": "gemini", "model": _normalize_gemini_model("models/gemini-2.5-flash")}]
+
+    return deduped
+
+
+MODEL_POOL = _load_model_pool()
+LAST_SUCCESS = {"provider": MODEL_POOL[0]["provider"], "model": MODEL_POOL[0]["model"]}
 
 # ── In-memory meeting store (replace with DB for production) ──────────────────
 meetings = []
 
 
-# ── Helper: call Gemini ──────────────────────────────────────────────────────
-def call_gemini(system: str, user: str, max_tokens: int = 1500, is_json: bool = False) -> str:
-    if not api_key:
-        raise RuntimeError(
-            "No API key found. Set GOOGLE_API_KEY or GEMINI_API_KEY in your environment or .env file."
-        )
+# ── Helper: call LLMs with fallback ──────────────────────────────────────────
+def _call_gemini(system: str, user: str, model: str, max_tokens: int, is_json: bool) -> str:
+    if not GEMINI_API_KEY:
+        raise RuntimeError("Missing GEMINI_API_KEY/GOOGLE_API_KEY.")
 
     payload = {
         "systemInstruction": {
@@ -48,7 +106,7 @@ def call_gemini(system: str, user: str, max_tokens: int = 1500, is_json: bool = 
     if is_json:
         payload["generationConfig"]["responseMimeType"] = "application/json"
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/{MODEL}:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/{model}:generateContent?key={GEMINI_API_KEY}"
     request_data = json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(
         url,
@@ -76,6 +134,160 @@ def call_gemini(system: str, user: str, max_tokens: int = 1500, is_json: bool = 
     return text
 
 
+def _call_openai(system: str, user: str, model: str, max_tokens: int, is_json: bool) -> str:
+    if not OPENAI_API_KEY:
+        raise RuntimeError("Missing OPENAI_API_KEY.")
+
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        "max_tokens": max_tokens,
+    }
+    if is_json:
+        payload["response_format"] = {"type": "json_object"}
+
+    request_data = json.dumps(payload).encode("utf-8")
+    request = urllib.request.Request(
+        "https://api.openai.com/v1/chat/completions",
+        data=request_data,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {OPENAI_API_KEY}",
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            response_data = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"OpenAI HTTP {e.code}: {error_body}") from e
+
+    choices = response_data.get("choices", [])
+    if not choices:
+        raise RuntimeError(f"OpenAI returned no choices: {response_data}")
+
+    content = choices[0].get("message", {}).get("content", "")
+    if not content:
+        raise RuntimeError(f"OpenAI returned empty text: {response_data}")
+    return content.strip()
+
+
+def _call_groq(system: str, user: str, model: str, max_tokens: int, is_json: bool) -> str:
+    if not GROQ_API_KEY:
+        raise RuntimeError("Missing GROQ_API_KEY.")
+
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        "max_tokens": max_tokens,
+    }
+    if is_json:
+        payload["response_format"] = {"type": "json_object"}
+
+    request_data = json.dumps(payload).encode("utf-8")
+    request = urllib.request.Request(
+        "https://api.groq.com/openai/v1/chat/completions",
+        data=request_data,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {GROQ_API_KEY}",
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            response_data = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"Groq HTTP {e.code}: {error_body}") from e
+
+    choices = response_data.get("choices", [])
+    if not choices:
+        raise RuntimeError(f"Groq returned no choices: {response_data}")
+
+    content = choices[0].get("message", {}).get("content", "")
+    if not content:
+        raise RuntimeError(f"Groq returned empty text: {response_data}")
+    return content.strip()
+
+
+def _call_mistral(system: str, user: str, model: str, max_tokens: int, is_json: bool) -> str:
+    if not MISTRAL_API_KEY:
+        raise RuntimeError("Missing MISTRAL_API_KEY.")
+
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        "max_tokens": max_tokens,
+    }
+
+    request_data = json.dumps(payload).encode("utf-8")
+    request = urllib.request.Request(
+        "https://api.mistral.ai/v1/chat/completions",
+        data=request_data,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {MISTRAL_API_KEY}",
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            response_data = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"Mistral HTTP {e.code}: {error_body}") from e
+
+    choices = response_data.get("choices", [])
+    if not choices:
+        raise RuntimeError(f"Mistral returned no choices: {response_data}")
+
+    content = choices[0].get("message", {}).get("content", "")
+    if not content:
+        raise RuntimeError(f"Mistral returned empty text: {response_data}")
+    return content.strip()
+
+
+def call_llm(system: str, user: str, max_tokens: int = 1500, is_json: bool = False) -> str:
+    errors = []
+    for entry in MODEL_POOL:
+        provider = entry["provider"]
+        model = entry["model"]
+        try:
+            if provider == "gemini":
+                text = _call_gemini(system, user, model, max_tokens, is_json)
+            elif provider == "openai":
+                text = _call_openai(system, user, model, max_tokens, is_json)
+            elif provider == "groq":
+                text = _call_groq(system, user, model, max_tokens, is_json)
+            elif provider == "mistral":
+                text = _call_mistral(system, user, model, max_tokens, is_json)
+            else:
+                errors.append(f"{provider}:{model} -> unsupported provider")
+                continue
+
+            global LAST_SUCCESS
+            LAST_SUCCESS = {"provider": provider, "model": model}
+            return text
+        except Exception as e:
+            errors.append(f"{provider}:{model} -> {str(e)}")
+
+    raise RuntimeError("All models failed. " + " | ".join(errors))
+
+
 BLOCKED_EMAIL_PATTERNS = [
     r"```",
     r"\bas an ai\b",
@@ -86,8 +298,10 @@ BLOCKED_EMAIL_PATTERNS = [
     r"\[(?:your name|insert name|recipient name|date|company)\]",
 ]
 
-TARGET_EMAIL_MIN_WORDS = 160
-TARGET_EMAIL_MAX_WORDS = 240
+EMAIL_TARGETS = {
+    "concise": (120, 160),
+    "formal": (190, 260),
+}
 
 
 def _has_blocked_email_content(text: str) -> bool:
@@ -135,9 +349,9 @@ def _is_email_incomplete(text: str) -> bool:
     return (not has_professional_close) or (not ends_cleanly)
 
 
-def _needs_email_rewrite(text: str) -> bool:
+def _needs_email_rewrite(text: str, min_words: int, max_words: int) -> bool:
     wc = _email_word_count(text)
-    return wc < TARGET_EMAIL_MIN_WORDS or wc > TARGET_EMAIL_MAX_WORDS or _is_email_incomplete(text)
+    return wc < min_words or wc > max_words or _is_email_incomplete(text)
 
 
 def _build_fallback_email(subject: str, title: str, summary_text: str, action_items: list, decisions: list) -> str:
@@ -198,7 +412,11 @@ def api_root():
 
 @app.route("/api/health", methods=["GET"])
 def health():
-    return jsonify({"status": "ok", "model": MODEL})
+    return jsonify({
+        "status": "ok",
+        "model": f"{LAST_SUCCESS['provider']}:{LAST_SUCCESS['model']}",
+        "models": [f"{m['provider']}:{m['model']}" for m in MODEL_POOL],
+    })
 
 
 @app.route("/api/process", methods=["POST"])
@@ -243,7 +461,7 @@ DECISION RULES:
 """
 
     try:
-        raw = call_gemini(system_prompt, f"Analyze this meeting:\n\n{notes}", max_tokens=4000, is_json=True)
+        raw = call_llm(system_prompt, f"Analyze this meeting:\n\n{notes}", max_tokens=4000, is_json=True)
         # Strip possible markdown fences
         clean = raw.replace("```json", "").replace("```", "").strip()
         result = json.loads(clean)
@@ -348,16 +566,24 @@ def generate_email():
     decision_lines = "\n".join(f"• {d}" for d in decisions_data)
     subject = f"Follow-up: {title}"
 
-    tone = (data.get('tone') or '').strip().lower() or 'friendly'
+    mode = (data.get('mode') or data.get('tone') or '').strip().lower() or 'concise'
+    if mode not in EMAIL_TARGETS:
+        mode = 'concise'
 
-    tone_instructions = {
-        'concise': 'Use a concise, executive tone: short paragraphs, direct language, and focus on the essentials.',
-        'friendly': 'Use a friendly, conversational but professional tone: courteous language and approachable phrasing.',
+    mode_instructions = {
+        'concise': 'Use a concise, executive tone: short paragraphs, direct language, and focus on essentials.',
         'formal': 'Use a formal, highly professional tone: full salutations, formal closings, and polished language.'
     }
 
+    paragraph_guidance = (
+        "Write 2-3 short paragraphs with tight sentences." if mode == "concise"
+        else "Write 4-5 paragraphs with complete, formal sentences."
+    )
+
+    min_words, max_words = EMAIL_TARGETS[mode]
+
     prompt = f"""Write a polished, ready-to-send business email for the meeting below.
-Tone: {tone}. {tone_instructions.get(tone, tone_instructions['friendly'])}
+Mode: {mode}. {mode_instructions.get(mode, mode_instructions['concise'])}
 
 Meeting: {title}
 Summary: {summary_text}
@@ -379,7 +605,7 @@ Write an actual email, not notes.
 Hard requirements:
 - Start with exactly one subject line in this format: "Subject: {subject}"
 - Use a professional greeting such as "Dear team," or "Hello everyone,"
-- Write 3-4 concise prose paragraphs with complete sentences
+- {paragraph_guidance}
 - Summarize the meeting outcome and decisions in natural language
 - Include a short numbered action-item section inside the email body
 - Add a brief closing paragraph that thanks the recipients and confirms next steps
@@ -387,20 +613,20 @@ Hard requirements:
 - Sign the email as "Your Name"
 - Do not use a casual opening like "Hi this and this"
 - Do not output bullet-point notes, metadata, markdown fences, or commentary outside the email
-- Target 170-220 words (not too short, not too long)
+- Target {min_words}-{max_words} words (not too short, not too long)
 - Ensure the email is complete and not cut off mid-sentence
 
-If the meeting has action items, make the tone clear, executive, and concise. Output ONLY the final email text, nothing else."""
+If the meeting has action items, keep the tone aligned with the selected mode. Output ONLY the final email text, nothing else."""
 
     try:
         # Adjust max tokens slightly for concise vs formal
-        max_tokens = 900 if tone == 'concise' else 1400
-        email_text = call_gemini("You are a professional business writer.", prompt, max_tokens=max_tokens)
+        max_tokens = 900 if mode == 'concise' else 1400
+        email_text = call_llm("You are a professional business writer.", prompt, max_tokens=max_tokens)
         email_text = _sanitize_email_text(email_text.strip())
         if not email_text.lower().startswith("subject:"):
             email_text = f"Subject: {subject}\n\n{email_text}"
 
-        if _needs_email_rewrite(email_text):
+        if _needs_email_rewrite(email_text, min_words, max_words):
             expansion_prompt = f"""Rewrite the following email so it is complete, professional, and medium length.
 
 Original email:
@@ -413,12 +639,12 @@ Requirements:
 - Keep a professional greeting
 - Keep a numbered action-item section
 - End with "Best regards," or "Kind regards," followed by "Your Name"
-- Target {TARGET_EMAIL_MIN_WORDS}-{TARGET_EMAIL_MAX_WORDS} words
+- Target {min_words}-{max_words} words
 - Ensure no abrupt ending or cut-off sentence
 - Keep the numbered action items
 - Do not add any new facts
 - Output only the revised email text"""
-            expanded_email = call_gemini("You are a professional business writer.", expansion_prompt, max_tokens=1600)
+            expanded_email = call_llm("You are a professional business writer.", expansion_prompt, max_tokens=1600)
             expanded_email = _sanitize_email_text(expanded_email.strip())
             if not expanded_email.lower().startswith("subject:"):
                 expanded_email = f"Subject: {subject}\n\n{expanded_email}"
@@ -439,12 +665,12 @@ Rules:
 Email:
 {email_text}
 """
-            cleaned_email = call_gemini("You are a professional business writer.", cleanup_prompt, max_tokens=1400)
+            cleaned_email = call_llm("You are a professional business writer.", cleanup_prompt, max_tokens=1400)
             email_text = _sanitize_email_text(cleaned_email.strip())
             if not email_text.lower().startswith("subject:"):
                 email_text = f"Subject: {subject}\n\n{email_text}"
 
-        if _needs_email_rewrite(email_text):
+        if _needs_email_rewrite(email_text, min_words, max_words):
             final_pass_prompt = f"""Produce a final polished follow-up email from this draft.
 
 Draft:
@@ -455,15 +681,15 @@ Requirements:
 - Keep one subject line at top
 - Keep a professional greeting and closing
 - End with "Best regards," or "Kind regards," then "Your Name"
-- Length must be between {TARGET_EMAIL_MIN_WORDS} and {TARGET_EMAIL_MAX_WORDS} words
+- Length must be between {min_words} and {max_words} words
 - Ensure complete, not truncated
 - Output only the final email text"""
-            final_email = call_gemini("You are a professional business writer.", final_pass_prompt, max_tokens=1600)
+            final_email = call_llm("You are a professional business writer.", final_pass_prompt, max_tokens=1600)
             email_text = _sanitize_email_text(final_email.strip())
             if not email_text.lower().startswith("subject:"):
                 email_text = f"Subject: {subject}\n\n{email_text}"
 
-        if _needs_email_rewrite(email_text):
+        if _needs_email_rewrite(email_text, min_words, max_words):
             email_text = _build_fallback_email(
                 subject=subject,
                 title=title,
@@ -518,7 +744,7 @@ Raw transcript (excerpt): {m['raw'][:1500]}
 If asked about something not in the meeting data, say so clearly. Keep answers brief and factual."""
 
     try:
-        reply = call_gemini(system, messages[-1]["content"], max_tokens=600)
+        reply = call_llm(system, messages[-1]["content"], max_tokens=600)
         return jsonify({"reply": reply})
     except Exception as e:
         return jsonify({"error": str(e)}), 500

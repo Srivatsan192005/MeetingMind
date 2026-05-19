@@ -11,16 +11,11 @@ import {
 } from 'lucide-react';
 import './Dashboard.css';
 
-const EMAIL_TONES = [
+const EMAIL_MODES = [
     {
         id: 'concise',
         label: 'Concise',
         hint: 'Short and direct',
-    },
-    {
-        id: 'friendly',
-        label: 'Friendly',
-        hint: 'Warm but professional',
     },
     {
         id: 'formal',
@@ -28,6 +23,11 @@ const EMAIL_TONES = [
         hint: 'Polished and executive',
     },
 ];
+
+const EMAIL_MODE_DETAILS = {
+    concise: '2-3 short paragraphs | 120-160 words | direct, minimal fluff',
+    formal: '4-5 paragraphs | 190-260 words | polished, structured language',
+};
 
 // ── Accordion Component ───────────────────────────────────────────────────────
 function Accordion({ title, icon: Icon, iconClass, count, defaultOpen = false, children }) {
@@ -52,13 +52,14 @@ function Accordion({ title, icon: Icon, iconClass, count, defaultOpen = false, c
 
 // ── Email Modal ───────────────────────────────────────────────────────────────
 function EmailModal({ meeting, onClose }) {
-    const [selectedTone, setSelectedTone] = useState('friendly');
+    const [selectedMode, setSelectedMode] = useState(null);
     const [drafts, setDrafts] = useState({});
-    const [loadingTones, setLoadingTones] = useState({});
+    const [loadingModes, setLoadingModes] = useState({});
     const [error, setError] = useState('');
 
-    const requestDraft = async (tone) => {
-        setLoadingTones(prev => ({ ...prev, [tone]: true }));
+    const requestDraft = async (mode) => {
+        if (!mode) return;
+        setLoadingModes(prev => ({ ...prev, [mode]: true }));
         setError('');
         try {
             const data = await generateEmail({
@@ -67,29 +68,23 @@ function EmailModal({ meeting, onClose }) {
                 summary: meeting.result?.summary || '',
                 action_items: meeting.result?.action_items || [],
                 decisions: meeting.result?.decisions || [],
-                tone,
+                mode,
             });
             if (!data.email) {
                 throw new Error('No email draft was returned by the backend.');
             }
-            setDrafts(prev => ({ ...prev, [tone]: data.email }));
+            setDrafts(prev => ({ ...prev, [mode]: data.email }));
         } catch (err) {
             setError(err?.response?.data?.error || err?.message || 'Failed to generate email. Please try again.');
         } finally {
-            setLoadingTones(prev => ({ ...prev, [tone]: false }));
+            setLoadingModes(prev => ({ ...prev, [mode]: false }));
         }
     };
 
-    React.useEffect(() => {
-        EMAIL_TONES.forEach(({ id }) => {
-            requestDraft(id);
-        });
-    }, []);
-
-    const activeTone = EMAIL_TONES.find((tone) => tone.id === selectedTone) || EMAIL_TONES[0];
-    const activeEmail = drafts[selectedTone] || '';
-    const activeLoading = !!loadingTones[selectedTone] && !activeEmail;
-    const previewTones = EMAIL_TONES.filter((tone) => tone.id !== selectedTone);
+    const activeMode = selectedMode ? EMAIL_MODES.find((mode) => mode.id === selectedMode) : null;
+    const activeEmail = selectedMode ? (drafts[selectedMode] || '') : '';
+    const activeLoading = !!selectedMode && !!loadingModes[selectedMode] && !activeEmail;
+    const hasDraft = !!selectedMode && !!drafts[selectedMode];
 
     const copyEmail = async () => {
         if (activeEmail) {
@@ -103,7 +98,7 @@ function EmailModal({ meeting, onClose }) {
                 <div className="modal-header">
                     <div>
                         <h3>Follow-up Email Draft</h3>
-                        <p className="modal-kicker">Pick a tone and get a distinct AI-written draft.</p>
+                        <p className="modal-kicker">Select a mode, then generate a draft to compare styles.</p>
                     </div>
                     <button className="close-btn" onClick={onClose}><X size={20} /></button>
                 </div>
@@ -115,53 +110,56 @@ function EmailModal({ meeting, onClose }) {
                     ) : (
                         <>
                             <div className="tone-tabs">
-                                {EMAIL_TONES.map((tone) => (
+                                {EMAIL_MODES.map((mode) => (
                                     <button
-                                        key={tone.id}
-                                        className={`tone-pill ${selectedTone === tone.id ? 'active' : ''}`}
-                                        onClick={() => setSelectedTone(tone.id)}
+                                        key={mode.id}
+                                        className={`tone-pill ${selectedMode === mode.id ? 'active' : ''}`}
+                                        onClick={() => setSelectedMode(mode.id)}
                                     >
-                                        <span>{tone.label}</span>
-                                        <small>{tone.hint}</small>
+                                        <span>{mode.label}</span>
+                                        <small>{mode.hint}</small>
                                     </button>
                                 ))}
                             </div>
+                            <div className="mode-detail">
+                                {selectedMode ? EMAIL_MODE_DETAILS[selectedMode] : 'Choose a mode to start.'}
+                            </div>
 
                             <div className="email-preview-shell">
-                                <div className="email-preview-header">
-                                    <div>
-                                        <div className="email-tone-label">{activeTone.label} draft</div>
-                                        <div className="email-tone-hint">{activeTone.hint}</div>
+                                {activeMode && (
+                                    <div className="email-preview-header">
+                                        <div>
+                                            <div className="email-tone-label">{activeMode.label} draft</div>
+                                            <div className="email-tone-hint">{activeMode.hint}</div>
+                                        </div>
+                                        <button
+                                            className="btn-secondary btn-small"
+                                            onClick={() => requestDraft(selectedMode)}
+                                            disabled={!selectedMode || activeLoading}
+                                        >
+                                            <RefreshCw size={14} /> {hasDraft ? 'Regenerate' : 'Generate'}
+                                        </button>
                                     </div>
-                                    <button className="btn-secondary btn-small" onClick={() => requestDraft(selectedTone)}>
-                                        <RefreshCw size={14} /> Regenerate
-                                    </button>
-                                </div>
+                                )}
 
-                                {activeLoading ? (
+                                {!activeMode && (
+                                    <div className="email-placeholder">Select a mode to generate a draft.</div>
+                                )}
+
+                                {activeMode && activeLoading && (
                                     <div className="modal-loading">
                                         <Loader2 className="spinner-lucide text-primary" size={32} />
-                                        <span>Writing the {activeTone.label.toLowerCase()} version…</span>
+                                        <span>Writing the {activeMode.label.toLowerCase()} version…</span>
                                     </div>
-                                ) : (
+                                )}
+
+                                {activeMode && !activeLoading && activeEmail && (
                                     <pre className="email-content email-content-compact">{activeEmail}</pre>
                                 )}
 
-                                <div className="email-preview-grid">
-                                    {previewTones.map((tone) => (
-                                        <button
-                                            key={tone.id}
-                                            className={`email-mini-card ${drafts[tone.id] ? 'ready' : 'loading'}`}
-                                            onClick={() => setSelectedTone(tone.id)}
-                                        >
-                                            <div className="email-mini-card-top">
-                                                <span>{tone.label}</span>
-                                                {loadingTones[tone.id] ? <Loader2 size={14} className="spinner-lucide" /> : <Sparkles size={14} />}
-                                            </div>
-                                            <p>{drafts[tone.id] ? drafts[tone.id].split('\n').slice(1, 4).join(' ') : `Generate the ${tone.label.toLowerCase()} version.`}</p>
-                                        </button>
-                                    ))}
-                                </div>
+                                {activeMode && !activeLoading && !activeEmail && (
+                                    <div className="email-placeholder">Click Generate to create the {activeMode.label.toLowerCase()} draft.</div>
+                                )}
                             </div>
                         </>
                     )}
@@ -171,8 +169,8 @@ function EmailModal({ meeting, onClose }) {
                     <button className="btn-secondary" onClick={copyEmail} disabled={!activeEmail}>
                         <Copy size={16} /> Copy
                     </button>
-                    <button className="btn-primary" onClick={() => requestDraft(selectedTone)}>
-                        <RefreshCw size={16} /> Regenerate current tone
+                    <button className="btn-primary" onClick={() => requestDraft(selectedMode)} disabled={!selectedMode || activeLoading}>
+                        <RefreshCw size={16} /> {hasDraft ? 'Regenerate current mode' : 'Generate current mode'}
                     </button>
                 </div>
             </div>
@@ -304,10 +302,9 @@ export default function Dashboard({ meetings = [], meeting, onMeetingUpdated, on
         const totalMeetings = meetings.length;
         const actionItems = meetings.reduce((sum, item) => sum + ((item.result?.action_items || []).length), 0);
         const decisions = meetings.reduce((sum, item) => sum + ((item.result?.decisions || item.result?.summary?.key_decisions || []).length), 0);
-        const tags = meetings.reduce((sum, item) => sum + ((item.tags || []).length), 0);
         const completed = meetings.reduce((sum, item) => sum + ((item.result?.completed_action_items || []).length), 0);
-        const urgentMeetings = meetings.filter(item => (item.tags || []).some(tag => String(tag).toLowerCase() === 'urgent')).length;
-        return { totalMeetings, actionItems, decisions, tags, completed, urgentMeetings };
+        const taggedMeetings = meetings.filter(item => (item.tags || []).length > 0).length;
+        return { totalMeetings, actionItems, decisions, completed, taggedMeetings };
     }, [meetings]);
 
     const overviewData = useMemo(() => {
@@ -358,27 +355,59 @@ export default function Dashboard({ meetings = [], meeting, onMeetingUpdated, on
             </div>
 
             <div className="overview-grid overview-grid-wide">
-                <div className="overview-panel-card">
+                <div className="overview-panel-card ai-insights-card">
                     <div className="overview-section-head">
-                        <h3>AI insights</h3>
+                        <h3>AI Insights</h3>
                         <span>Workspace summary</span>
                     </div>
                     <div className="insight-grid">
                         <div className="insight-card insight-blue">
-                            <strong>{dashboardStats.urgentMeetings}</strong>
-                            <span>urgent meetings</span>
+                            <div className="insight-icon-ring insight-ring-blue">
+                                <BarChart2 size={18} />
+                            </div>
+                            <div className="insight-meta">
+                                <strong>{dashboardStats.taggedMeetings}</strong>
+                                <span>Tagged Meetings</span>
+                            </div>
+                            <div className="insight-bar">
+                                <div className="insight-bar-fill tone-blue" style={{ width: `${dashboardStats.totalMeetings > 0 ? Math.min(100, Math.round((dashboardStats.taggedMeetings / dashboardStats.totalMeetings) * 100)) : 0}%` }} />
+                            </div>
                         </div>
                         <div className="insight-card insight-green">
-                            <strong>{dashboardStats.completed}</strong>
-                            <span>completed tasks</span>
+                            <div className="insight-icon-ring insight-ring-green">
+                                <CheckCircle size={18} />
+                            </div>
+                            <div className="insight-meta">
+                                <strong>{dashboardStats.completed}</strong>
+                                <span>Completed Tasks</span>
+                            </div>
+                            <div className="insight-bar">
+                                <div className="insight-bar-fill tone-green" style={{ width: `${dashboardStats.actionItems > 0 ? Math.min(100, Math.round((dashboardStats.completed / dashboardStats.actionItems) * 100)) : 0}%` }} />
+                            </div>
                         </div>
                         <div className="insight-card insight-purple">
-                            <strong>{Math.max(0, dashboardStats.actionItems - dashboardStats.completed)}</strong>
-                            <span>open tasks</span>
+                            <div className="insight-icon-ring insight-ring-purple">
+                                <Zap size={18} />
+                            </div>
+                            <div className="insight-meta">
+                                <strong>{Math.max(0, dashboardStats.actionItems - dashboardStats.completed)}</strong>
+                                <span>Open Tasks</span>
+                            </div>
+                            <div className="insight-bar">
+                                <div className="insight-bar-fill tone-purple" style={{ width: `${dashboardStats.actionItems > 0 ? Math.min(100, Math.round(((dashboardStats.actionItems - dashboardStats.completed) / dashboardStats.actionItems) * 100)) : 0}%` }} />
+                            </div>
                         </div>
                         <div className="insight-card insight-amber">
-                            <strong>{dashboardStats.decisions}</strong>
-                            <span>decisions captured</span>
+                            <div className="insight-icon-ring insight-ring-amber">
+                                <Star size={18} />
+                            </div>
+                            <div className="insight-meta">
+                                <strong>{dashboardStats.decisions}</strong>
+                                <span>Decisions Captured</span>
+                            </div>
+                            <div className="insight-bar">
+                                <div className="insight-bar-fill tone-amber" style={{ width: `${Math.min(100, dashboardStats.decisions * 10)}%` }} />
+                            </div>
                         </div>
                     </div>
                 </div>
