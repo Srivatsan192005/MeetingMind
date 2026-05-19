@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: meetingmind-backend
+    runtime: python311
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn -w 4 -b 0.0.0.0:$PORT backend.app:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11
+      - key: FLASK_ENV
+        value: production
+      - key: GOOGLE_API_KEY
+        scope: secret
+      - key: OPENAI_API_KEY
+        scope: secret
+      - key: GROQ_API_KEY
+        scope: secret
+      - key: MISTRAL_API_KEY
+        scope: secret
+      - key: AI_MODEL_POOL
+        value: openai:gpt-4.1-mini,groq:llama-3.1-70b-versatile,gemini:gemini-2.5-flash,mistral:mistral-large-latest
