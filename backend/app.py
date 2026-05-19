@@ -719,27 +719,46 @@ Requirements:
 def chat():
     """
     Chat about a meeting.
-    Body: { "meeting_id": 0, "messages": [{"role": "user", "content": "..."}] }
+    Body: { "meeting_id": 0, "messages": [...] }  OR  { "title": "...", "summary": "...", ... "messages": [...] }
     """
     data = request.get_json()
-    mid = data.get("meeting_id")
     messages = data.get("messages", [])
 
-    if mid is None or mid >= len(meetings):
-        return jsonify({"error": "Meeting not found"}), 404
     if not messages:
         return jsonify({"error": "No messages provided"}), 400
 
-    m = meetings[mid]
-    r = m["result"]
+    # Try to get meeting by ID from in-memory store
+    mid = data.get("meeting_id")
+    if mid is not None:
+        if isinstance(mid, int) and 0 <= mid < len(meetings):
+            m = meetings[mid]
+            r = m["result"]
+            title = m["title"]
+            transcript = m.get("raw", "")[:1500]
+        else:
+            return jsonify({"error": "Meeting not found"}), 404
+    else:
+        # Use inline meeting data (for Supabase or client-stored meetings)
+        title = data.get("title", "Meeting")
+        summary = data.get("summary", "")
+        action_items = data.get("action_items", [])
+        decisions = data.get("decisions", [])
+        transcript = data.get("raw", "")[:1500] if isinstance(data.get("raw", ""), str) else ""
+
+        # Construct result object
+        r = {
+            "summary": summary,
+            "action_items": action_items,
+            "decisions": decisions,
+        }
 
     system = f"""You are a meeting assistant. Answer questions about the following meeting concisely and helpfully.
 
-Meeting Title: {m['title']}
+Meeting Title: {title}
 Summary: {r.get('summary', '')}
 Action Items: {json.dumps(r.get('action_items', []))}
 Decisions: {json.dumps(r.get('decisions', []))}
-Raw transcript (excerpt): {m['raw'][:1500]}
+Raw transcript (excerpt): {transcript}
 
 If asked about something not in the meeting data, say so clearly. Keep answers brief and factual."""
 

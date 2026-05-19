@@ -30,8 +30,14 @@ export const generateEmail = (meeting) => {
     return api.post('/email', { meeting_id: meeting }).then(r => r.data);
 };
 
-export const sendChatMessage = (meetingId, messages) =>
-    api.post('/chat', { meeting_id: meetingId, messages }).then(r => r.data);
+export const sendChatMessage = (meetingIdOrPayload, messages) => {
+    if (typeof meetingIdOrPayload === 'object' && meetingIdOrPayload.messages) {
+        // New format: full payload object
+        return api.post('/chat', meetingIdOrPayload).then(r => r.data);
+    }
+    // Legacy format: meetingId + messages array
+    return api.post('/chat', { meeting_id: meetingIdOrPayload, messages }).then(r => r.data);
+};
 
 export const listMeetings = () =>
     api.get('/meetings').then(r => r.data);

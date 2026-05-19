@@ -34,7 +34,16 @@ export default function ChatPage({ meeting }) {
         setLoading(true);
 
         try {
-            const { reply } = await sendChatMessage(meeting.id, next);
+            const chatPayload = {
+                messages: next,
+                title: meeting.title,
+                summary: meeting.result?.summary || '',
+                action_items: meeting.result?.action_items || [],
+                decisions: meeting.result?.decisions || [],
+                raw: meeting.raw || '',
+                meeting_id: meeting.id,
+            };
+            const { reply } = await sendChatMessage(chatPayload);
             setMessages([...next, { role: 'assistant', content: reply }]);
         } catch {
             setMessages([...next, { role: 'assistant', content: 'Sorry, something went wrong. Please try again.' }]);
