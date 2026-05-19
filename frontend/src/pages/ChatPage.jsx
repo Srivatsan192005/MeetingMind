@@ -43,10 +43,12 @@ export default function ChatPage({ meeting }) {
                 raw: meeting.raw || '',
                 meeting_id: meeting.id,
             };
+            console.log('Sending chat payload:', chatPayload);
             const { reply } = await sendChatMessage(chatPayload);
             setMessages([...next, { role: 'assistant', content: reply }]);
-        } catch {
-            setMessages([...next, { role: 'assistant', content: 'Sorry, something went wrong. Please try again.' }]);
+        } catch (error) {
+            console.error('Chat error:', error);
+            setMessages([...next, { role: 'assistant', content: `Error: ${error.message || 'Something went wrong. Please try again.'}` }]);
         } finally {
             setLoading(false);
         }

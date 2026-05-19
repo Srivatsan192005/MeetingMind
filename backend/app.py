@@ -721,38 +721,42 @@ def chat():
     Chat about a meeting.
     Body: { "meeting_id": 0, "messages": [...] }  OR  { "title": "...", "summary": "...", ... "messages": [...] }
     """
-    data = request.get_json()
-    messages = data.get("messages", [])
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No request body"}), 400
 
-    if not messages:
-        return jsonify({"error": "No messages provided"}), 400
+        messages = data.get("messages", [])
 
-    # Try to get meeting by ID from in-memory store
-    mid = data.get("meeting_id")
-    if mid is not None:
-        if isinstance(mid, int) and 0 <= mid < len(meetings):
-            m = meetings[mid]
-            r = m["result"]
-            title = m["title"]
-            transcript = m.get("raw", "")[:1500]
+        if not messages:
+            return jsonify({"error": "No messages provided"}), 400
+
+        # Try to get meeting by ID from in-memory store
+        mid = data.get("meeting_id")
+        if mid is not None:
+            if isinstance(mid, int) and 0 <= mid < len(meetings):
+                m = meetings[mid]
+                r = m["result"]
+                title = m["title"]
+                transcript = m.get("raw", "")[:1500]
+            else:
+                return jsonify({"error": f"Meeting not found (id={mid}, total={len(meetings)})"}), 404
         else:
-            return jsonify({"error": "Meeting not found"}), 404
-    else:
-        # Use inline meeting data (for Supabase or client-stored meetings)
-        title = data.get("title", "Meeting")
-        summary = data.get("summary", "")
-        action_items = data.get("action_items", [])
-        decisions = data.get("decisions", [])
-        transcript = data.get("raw", "")[:1500] if isinstance(data.get("raw", ""), str) else ""
+            # Use inline meeting data (for Supabase or client-stored meetings)
+            title = data.get("title", "Meeting")
+            summary = data.get("summary", "")
+            action_items = data.get("action_items", [])
+            decisions = data.get("decisions", [])
+            transcript = data.get("raw", "")[:1500] if isinstance(data.get("raw", ""), str) else ""
 
-        # Construct result object
-        r = {
-            "summary": summary,
-            "action_items": action_items,
-            "decisions": decisions,
-        }
+            # Construct result object
+            r = {
+                "summary": summary,
+                "action_items": action_items,
+                "decisions": decisions,
+            }
 
-    system = f"""You are a meeting assistant. Answer questions about the following meeting concisely and helpfully.
+        system = f"""You are a meeting assistant. Answer questions about the following meeting concisely and helpfully.
 
 Meeting Title: {title}
 Summary: {r.get('summary', '')}
@@ -762,11 +766,13 @@ Raw transcript (excerpt): {transcript}
 
 If asked about something not in the meeting data, say so clearly. Keep answers brief and factual."""
 
-    try:
         reply = call_llm(system, messages[-1]["content"], max_tokens=600)
         return jsonify({"reply": reply})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Chat error: {str(e)}\n{error_trace}")
+        return jsonify({"error": str(e), "trace": error_trace}), 500
 
 
 @app.route("/api/search", methods=["GET"])
