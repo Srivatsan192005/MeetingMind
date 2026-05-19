@@ -731,18 +731,17 @@ def chat():
         if not messages:
             return jsonify({"error": "No messages provided"}), 400
 
-        # Try to get meeting by ID from in-memory store
+        # Try to get meeting by ID from in-memory store (legacy)
+        # Only if meeting_id is an integer in range
         mid = data.get("meeting_id")
-        if mid is not None:
-            if isinstance(mid, int) and 0 <= mid < len(meetings):
-                m = meetings[mid]
-                r = m["result"]
-                title = m["title"]
-                transcript = m.get("raw", "")[:1500]
-            else:
-                return jsonify({"error": f"Meeting not found (id={mid}, total={len(meetings)})"}), 404
+        if mid is not None and isinstance(mid, int) and 0 <= mid < len(meetings):
+            m = meetings[mid]
+            r = m["result"]
+            title = m["title"]
+            transcript = m.get("raw", "")[:1500]
         else:
             # Use inline meeting data (for Supabase or client-stored meetings)
+            # This is the new format that supports UUID-based meeting IDs
             title = data.get("title", "Meeting")
             summary = data.get("summary", "")
             action_items = data.get("action_items", [])
