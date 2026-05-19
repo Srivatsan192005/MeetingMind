@@ -1,0 +1,30 @@
+{
+  "summary": "The team discussed the upcoming Q3 launch of the MindFlow productivity app. The launch date has been moved to July 15. The app will launch with three core features: Focus Timer, Habit Tracker, and Daily Journal.",
+  "action_items": [
+    {
+      "task": "Finalize backend API",
+      "assignee": "Alex",
+      "deadline": "June 5"
+    },
+    {
+      "task": "Set up CI/CD pipeline",
+      "assignee": "Alex",
+      "deadline": "May 28"
+    },
+    {
+      "task": "Finalize onboarding screens wireframes",
+      "assignee": "Sam",
+      "deadline": "May 22"
+    },
+    {
+      "task": "Write test plan",
+      "assignee": "Jordan",
+      "deadline": "May 19"
+    }
+  ],
+  "decisions": [
+    "Adopt Notion for project documentation going forward.",
+    "Launch app with three core features: Focus Timer, Habit Tracker, and Daily Journal.",
+    "Defer Social Sharing feature to v1.1."
+  ]
+}

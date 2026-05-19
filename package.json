@@ -1,0 +1,10 @@
+{
+  "scripts": {
+    "dev": "node scripts/start-dev.mjs",
+    "dev:backend": "cd backend && python app.py",
+    "dev:frontend": "cd frontend && npm run dev"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.105.4"
+  }
+}
