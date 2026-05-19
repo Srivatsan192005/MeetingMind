@@ -7,10 +7,11 @@ const resolveDefaultBaseURL = () => {
             return 'http://127.0.0.1:5000/api';
         }
 
-        return '/api';
+        // Production: use Render backend URL
+        return 'https://meetingmind-backend-faua.onrender.com/api';
     }
 
-    return '/api';
+    return 'https://meetingmind-backend-faua.onrender.com/api';
 };
 
 const envBaseURL =
