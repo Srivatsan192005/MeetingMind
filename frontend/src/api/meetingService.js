@@ -1,6 +1,19 @@
 import { supabase } from './supabaseClient';
 
-const backendBaseURL = 'http://localhost:5000/api';
+const resolveBackendBaseURL = () => {
+  if (typeof window !== 'undefined' && window.location?.hostname) {
+    const host = window.location.hostname;
+    if (host === 'localhost' || host === '127.0.0.1') {
+      return 'http://localhost:5000/api';
+    }
+  }
+
+  return '/api';
+};
+
+const backendBaseURL = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_BASE_URL)
+  ? import.meta.env.VITE_API_BASE_URL.trim() || resolveBackendBaseURL()
+  : resolveBackendBaseURL();
 
 /**
  * Inserts a meeting record into the Supabase `meetings` table.

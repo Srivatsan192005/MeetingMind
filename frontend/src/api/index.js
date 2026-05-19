@@ -3,13 +3,14 @@ import axios from 'axios';
 const resolveDefaultBaseURL = () => {
     if (typeof window !== 'undefined' && window.location?.hostname) {
         const host = window.location.hostname;
-        // If frontend is opened via LAN IP, use the same host for backend calls.
-        if (host && host !== 'localhost' && host !== '127.0.0.1') {
-            return `http://${host}:5000/api`;
+        if (host === 'localhost' || host === '127.0.0.1') {
+            return 'http://127.0.0.1:5000/api';
         }
+
+        return '/api';
     }
 
-    return 'http://127.0.0.1:5000/api';
+    return '/api';
 };
 
 const envBaseURL =
