@@ -16,6 +16,26 @@
   font-weight: 500;
 }
 
+.export-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.preset-btn {
+  background: var(--bg-surface);
+  color: var(--secondary-text);
+  border: 1px solid var(--border-color);
+  padding: 10px 14px;
+}
+
+.preset-btn.active {
+  background: #eff6ff;
+  color: var(--primary);
+  border-color: #bfdbfe;
+}
+
 .export-section-header h3 {
   margin: 0;
   font-size: 1.1rem;

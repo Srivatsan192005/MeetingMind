@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { Plus, FolderOpen, FileText, Search, X } from 'lucide-react';
+import { Plus, FolderOpen, FileText, Search, X, CalendarDays, Tag, MessageSquareCheck, Home } from 'lucide-react';
 import { fetchMeetings } from '../api/meetingService';
 
-export default function Sidebar({ currentMeeting, onSelect, onNew }) {
+export default function Sidebar({ currentMeeting, onSelect, onNew, onHome }) {
   const [meetings, setMeetings] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -23,21 +23,40 @@ export default function Sidebar({ currentMeeting, onSelect, onNew }) {
   // Filter meetings based on search query
   const filteredMeetings = useMemo(() => {
     if (!searchQuery.trim()) return meetings;
-    return meetings.filter(m => 
-      (m.title || '').toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const query = searchQuery.toLowerCase();
+    return meetings.filter(m => {
+      const titleMatch = (m.title || '').toLowerCase().includes(query);
+      const dateMatch = (m.meeting_date || '').toLowerCase().includes(query);
+      const tagMatch = (m.tags || []).some(tag => String(tag).toLowerCase().includes(query));
+      return titleMatch || dateMatch || tagMatch;
+    });
   }, [meetings, searchQuery]);
+
+  const formatDate = (value) => {
+    if (!value) return 'Recently saved';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  };
+
+  const getActionCount = (meeting) => (meeting.result?.action_items || []).length;
+  const getDecisionCount = (meeting) => (meeting.result?.decisions || meeting.result?.summary?.key_decisions || []).length;
 
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
         <h3>Meetings</h3>
-        <button onClick={onNew} className="new-btn" title="New Meeting">
-          <Plus size={18} />
-        </button>
-        <button onClick={refreshMeetings} className="new-btn" title="Refresh" style={{ marginLeft: 8 }}>
-          <FolderOpen size={18} />
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={onHome} className="new-btn" title="Dashboard overview">
+            <Home size={18} />
+          </button>
+          <button onClick={onNew} className="new-btn" title="New Meeting">
+            <Plus size={18} />
+          </button>
+          <button onClick={refreshMeetings} className="new-btn" title="Refresh">
+            <FolderOpen size={18} />
+          </button>
+        </div>
       </div>
       
       <div className="search-container" style={{ padding: '8px 12px', borderBottom: '1px solid #e5e7eb' }}>
@@ -82,8 +101,19 @@ export default function Sidebar({ currentMeeting, onSelect, onNew }) {
           <li key={m.id || idx}
             className={currentMeeting?.id === m.id ? 'active' : ''}
             onClick={() => onSelect(m)}>
-            <FileText size={16} className="text-muted" />
-            <span className="truncate">{m.title || `Meeting ${idx + 1}`}</span>
+            <div className="meeting-list-icon">
+              <FileText size={16} className="text-muted" />
+            </div>
+            <div className="meeting-list-content">
+              <div className="meeting-list-title-row">
+                <span className="truncate">{m.title || `Meeting ${idx + 1}`}</span>
+                <span className="meeting-date"><CalendarDays size={12} /> {formatDate(m.meeting_date || m.created_at)}</span>
+              </div>
+              <div className="meeting-list-meta">
+                <span><MessageSquareCheck size={12} /> {getActionCount(m)} actions</span>
+                <span><Tag size={12} /> {getDecisionCount(m)} decisions</span>
+              </div>
+            </div>
           </li>
         ))}
         {filteredMeetings.length === 0 && (

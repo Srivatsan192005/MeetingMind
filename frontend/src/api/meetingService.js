@@ -33,6 +33,45 @@ export async function storeMeeting(meeting) {
   return { data, error };
 }
 
+/** Updates an existing meeting record in Supabase or the local backend. */
+export async function updateMeeting(meetingId, meeting) {
+  if (!supabase) {
+    try {
+      const response = await fetch(`${backendBaseURL}/meetings/${meetingId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(meeting),
+      });
+      const data = await response.json();
+      return {
+        data,
+        error: response.ok ? null : new Error(data?.error || 'Failed to update meeting'),
+      };
+    } catch (error) {
+      return { data: null, error };
+    }
+  }
+
+  const { data, error } = await supabase
+    .from('meetings')
+    .update({
+      title: meeting.title || 'Untitled Meeting',
+      meeting_date: meeting.meeting_date || new Date().toISOString().split('T')[0],
+      meeting_time: meeting.meeting_time || null,
+      organizer: meeting.organizer || null,
+      platform: meeting.platform || null,
+      full_meeting_json: meeting,
+      raw_transcript: meeting.raw || null,
+      tags: meeting.tags || [],
+      sentiment: meeting.sentiment || null,
+      risk_level: meeting.risk_level || null,
+    })
+    .eq('id', meetingId)
+    .select();
+
+  return { data, error };
+}
+
 /** Retrieves all meetings ordered by newest first */
 export async function fetchMeetings() {
   if (supabase) {
@@ -74,7 +113,11 @@ export async function fetchMeetings() {
             title: row.title || fullJson?.title || 'Untitled Meeting',
             raw: row.raw_transcript || fullJson?.raw || row.raw || '',
             result: result,
-            full_meeting_json: fullJson
+            full_meeting_json: fullJson,
+            meeting_date: row.meeting_date || fullJson?.meeting_date || null,
+            created_at: row.created_at || null,
+            status: row.status || null,
+            tags: row.tags || fullJson?.tags || []
           };
         });
         return { data: meetings, error: null };

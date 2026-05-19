@@ -282,6 +282,25 @@ def get_meeting(meeting_id):
     return jsonify(meetings[meeting_id])
 
 
+@app.route("/api/meetings/<int:meeting_id>", methods=["PUT"])
+def update_meeting(meeting_id):
+    data = request.get_json(silent=True) or {}
+
+    if meeting_id < 0 or meeting_id >= len(meetings):
+        return jsonify({"error": "Meeting not found"}), 404
+
+    current = meetings[meeting_id]
+    updated = {
+        **current,
+        "title": data.get("title", current.get("title", "Untitled Meeting")),
+        "raw": data.get("raw", current.get("raw", "")),
+        "result": data.get("result", current.get("result", {})),
+        "full_meeting_json": data.get("full_meeting_json", data or current.get("full_meeting_json", {})),
+    }
+    meetings[meeting_id] = updated
+    return jsonify(updated)
+
+
 @app.route("/api/email", methods=["POST"])
 def generate_email():
     """
@@ -329,7 +348,16 @@ def generate_email():
     decision_lines = "\n".join(f"• {d}" for d in decisions_data)
     subject = f"Follow-up: {title}"
 
+    tone = (data.get('tone') or '').strip().lower() or 'friendly'
+
+    tone_instructions = {
+        'concise': 'Use a concise, executive tone: short paragraphs, direct language, and focus on the essentials.',
+        'friendly': 'Use a friendly, conversational but professional tone: courteous language and approachable phrasing.',
+        'formal': 'Use a formal, highly professional tone: full salutations, formal closings, and polished language.'
+    }
+
     prompt = f"""Write a polished, ready-to-send business email for the meeting below.
+Tone: {tone}. {tone_instructions.get(tone, tone_instructions['friendly'])}
 
 Meeting: {title}
 Summary: {summary_text}
@@ -365,7 +393,9 @@ Hard requirements:
 If the meeting has action items, make the tone clear, executive, and concise. Output ONLY the final email text, nothing else."""
 
     try:
-        email_text = call_gemini("You are a professional business writer.", prompt, max_tokens=1400)
+        # Adjust max tokens slightly for concise vs formal
+        max_tokens = 900 if tone == 'concise' else 1400
+        email_text = call_gemini("You are a professional business writer.", prompt, max_tokens=max_tokens)
         email_text = _sanitize_email_text(email_text.strip())
         if not email_text.lower().startswith("subject:"):
             email_text = f"Subject: {subject}\n\n{email_text}"
