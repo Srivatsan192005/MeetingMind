@@ -3,15 +3,19 @@ import axios from 'axios';
 const resolveDefaultBaseURL = () => {
     if (typeof window !== 'undefined' && window.location?.hostname) {
         const host = window.location.hostname;
+        const protocol = window.location.protocol;
+        
+        // Development: localhost, use local backend
         if (host === 'localhost' || host === '127.0.0.1') {
             return 'http://127.0.0.1:5000/api';
         }
 
-        // Production: use Render backend URL
-        return 'https://meetingmind-backend-faua.onrender.com/api';
+        // For any other domain (production, mobile on local network, custom domains),
+        // use relative API path (same origin) - this works on all networks
+        return '/api';
     }
 
-    return 'https://meetingmind-backend-faua.onrender.com/api';
+    return '/api';
 };
 
 const envBaseURL =

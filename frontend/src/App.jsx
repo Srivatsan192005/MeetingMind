@@ -5,6 +5,7 @@ import InputPage from './pages/InputPage';
 import Dashboard from './pages/Dashboard';
 import { fetchMeetings, storeMeeting } from './api/meetingService';
 import './App.css';
+import './mobile.css';
 
 export default function App() {
     const [page, setPage] = useState('input');

@@ -62,6 +62,107 @@
   gap: 12px;
 }
 
+/* Mobile Responsive */
+@media (max-width: 1200px) {
+  .overview-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .dashboard {
+    gap: 16px;
+  }
+
+  .overview-hero {
+    flex-direction: column;
+    padding: 16px;
+    gap: 16px;
+  }
+
+  .overview-hero h2 {
+    font-size: 1.5rem;
+  }
+
+  .overview-hero p {
+    font-size: 0.9rem;
+  }
+
+  .overview-stats {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .overview-stat-card {
+    padding: 12px;
+    gap: 8px;
+  }
+
+  .overview-stat-card strong {
+    font-size: 1.5rem;
+  }
+
+  .overview-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .overview-grid-wide {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-chip-row {
+    gap: 8px;
+  }
+
+  .filter-chip {
+    padding: 6px 10px;
+    font-size: 0.85rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .overview-hero {
+    padding: 12px;
+    gap: 12px;
+  }
+
+  .overview-hero h2 {
+    font-size: 1.2rem;
+  }
+
+  .overview-hero p {
+    font-size: 0.85rem;
+    max-width: 100%;
+  }
+
+  .overview-hero-badge {
+    padding: 8px 10px;
+    font-size: 0.75rem;
+  }
+
+  .overview-stat-card {
+    padding: 10px;
+  }
+
+  .overview-stat-card span {
+    font-size: 0.75rem;
+  }
+
+  .overview-stat-card strong {
+    font-size: 1.25rem;
+  }
+
+  .overview-section-head {
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .overview-section-head h3 {
+    font-size: 0.9rem;
+  }
+}
+
 .overview-stat-card {
   padding: 16px;
   border-radius: 18px;
@@ -1215,5 +1316,181 @@
   .timeline-header {
     align-items: flex-start;
     flex-direction: column;
+  }
+}
+
+/* Enhanced Mobile Responsiveness */
+@media (max-width: 1200px) {
+  .overview-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .insight-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .dashboard {
+    gap: 16px;
+  }
+
+  .overview-hero {
+    flex-direction: column;
+    padding: 16px;
+    gap: 16px;
+  }
+
+  .overview-hero h2 {
+    font-size: 1.5rem;
+  }
+
+  .overview-hero p {
+    font-size: 0.9rem;
+  }
+
+  .overview-stats {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .overview-stat-card {
+    padding: 12px;
+    gap: 8px;
+  }
+
+  .overview-stat-card strong {
+    font-size: 1.5rem;
+  }
+
+  .overview-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .overview-grid-wide {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-chip-row {
+    gap: 8px;
+  }
+
+  .filter-chip {
+    padding: 6px 10px;
+    font-size: 0.85rem;
+  }
+
+  .activity-item {
+    padding: 12px;
+  }
+
+  .insight-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .insight-card {
+    min-height: 100px;
+    padding: 12px 14px;
+  }
+
+  .insight-card .insight-meta strong {
+    font-size: 1.8rem;
+  }
+
+  .dash-header {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 14px 16px;
+  }
+
+  .dash-header h2 {
+    font-size: 1.4rem;
+  }
+
+  .dash-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .action-item {
+    padding: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .overview-hero {
+    padding: 12px;
+    gap: 12px;
+  }
+
+  .overview-hero h2 {
+    font-size: 1.2rem;
+  }
+
+  .overview-hero p {
+    font-size: 0.85rem;
+    max-width: 100%;
+  }
+
+  .overview-hero-badge {
+    padding: 8px 10px;
+    font-size: 0.75rem;
+  }
+
+  .overview-stat-card {
+    padding: 10px;
+  }
+
+  .overview-stat-card span {
+    font-size: 0.75rem;
+  }
+
+  .overview-stat-card strong {
+    font-size: 1.25rem;
+  }
+
+  .overview-section-head {
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .overview-section-head h3 {
+    font-size: 0.9rem;
+  }
+
+  .insight-card {
+    grid-template-columns: auto 1fr;
+    min-height: 90px;
+    padding: 10px 12px;
+  }
+
+  .insight-card .insight-meta strong {
+    font-size: 1.4rem;
+  }
+
+  .insight-icon-ring {
+    width: 36px;
+    height: 36px;
+  }
+
+  .dash-header h2 {
+    font-size: 1rem;
+  }
+
+  .dash-actions {
+    gap: 6px;
+  }
+
+  .action-item {
+    padding: 10px;
+  }
+
+  .activity-item {
+    padding: 10px;
+  }
+
+  .card-header h3 {
+    font-size: 1rem;
   }
 }
