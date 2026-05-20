@@ -129,11 +129,12 @@ VITE_API_BASE_URL=/api
 
 This project is pre-configured for Vercel with both frontend and backend on the same domain:
 
-1. **Frontend**: Builds to `frontend/dist` 
+1. **Frontend**: Builds to `frontend/dist`
 2. **Backend**: Runs as Serverless Functions (`api/index.py`)
 3. **API Communication**: Uses relative `/api` path (automatic)
 
 **Deploy to Vercel:**
+
 ```bash
 vercel deploy
 ```
@@ -147,15 +148,18 @@ If deploying frontend and backend separately:
 #### Option A: Vercel Frontend + Render Backend
 
 1. **Deploy Backend to Render** (already configured in `render.yaml`):
+
    ```bash
    # Push to Render from git
    git push render main
    ```
+
    Get your backend URL: `https://your-app-name.onrender.com`
 
 2. **Deploy Frontend to Vercel/Netlify/other platform**:
-   
+
    Set environment variable:
+
    ```bash
    VITE_API_BASE_URL=https://your-app-name.onrender.com/api
    ```
@@ -168,6 +172,7 @@ If deploying frontend and backend separately:
 #### Option B: Both on Render
 
 1. **Update `render.yaml`** to include frontend:
+
    ```yaml
    services:
      - type: web
@@ -175,7 +180,7 @@ If deploying frontend and backend separately:
        runtime: node
        buildCommand: cd frontend && npm install && npm run build
        startCommand: npm start
-       
+
      - type: web
        name: meetingmind-backend
        # ... existing backend config
@@ -186,6 +191,7 @@ If deploying frontend and backend separately:
 ### Environment Variables for Deployment
 
 **Frontend** (set during build):
+
 ```bash
 VITE_SUPABASE_URL=your-supabase-url
 VITE_SUPABASE_ANON_KEY=your-supabase-key
@@ -193,6 +199,7 @@ VITE_API_BASE_URL=https://your-backend-url/api
 ```
 
 **Backend** (Render, Vercel, or other):
+
 ```bash
 GOOGLE_API_KEY=your-gemini-api-key
 OPENAI_API_KEY=your-openai-key
@@ -204,17 +211,17 @@ FLASK_ENV=production
 ### Chatbox & API in Deployment
 
 The chatbox (and all API calls) will work automatically if:
+
 - ✅ Frontend and backend are on the **same domain** (Vercel setup)
 - ✅ **`VITE_API_BASE_URL` is properly set** for separate deployments
 - ✅ Backend is **publicly accessible** and **CORS is enabled** (already configured in Flask)
 
 **Troubleshooting Chatbox Issues:**
+
 1. Open DevTools → Network tab → check failed API requests
 2. Verify `VITE_API_BASE_URL` environment variable is set
 3. Ensure backend URL is publicly accessible (test with `curl https://your-backend/api/health`)
 4. Check backend logs for CORS errors
-
-
 
 LLMs can sometimes hallucinate or incorrectly attribute an action item if the meeting notes are ambiguous (e.g., "We need to fix the backend," but it doesn't state who will do it).
 

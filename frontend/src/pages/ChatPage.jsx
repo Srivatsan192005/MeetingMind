@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { sendChatMessage } from '../api';
+import { generateLocalResponse, shouldUseLocalLogic } from '../api/chatLogic';
 import { MessageCircle, Bot, User, Send } from 'lucide-react';
 import './ChatPage.css';
 
@@ -34,21 +35,39 @@ export default function ChatPage({ meeting }) {
         setLoading(true);
 
         try {
-            const chatPayload = {
-                messages: next,
-                title: meeting.title,
-                summary: meeting.result?.summary || '',
-                action_items: meeting.result?.action_items || [],
-                decisions: meeting.result?.decisions || [],
-                raw: meeting.raw || '',
-                meeting_id: meeting.id,
-            };
-            console.log('Sending chat payload:', chatPayload);
-            const { reply } = await sendChatMessage(chatPayload);
+            let reply = '';
+            
+            // Try local logic first (fast, no API calls needed)
+            if (shouldUseLocalLogic(userMsg.content)) {
+                reply = generateLocalResponse(userMsg.content, meeting);
+                console.log('Using local chat logic');
+            } else {
+                // Fallback to API for more complex questions
+                console.log('Using API chat logic');
+                const chatPayload = {
+                    messages: next,
+                    title: meeting.title,
+                    summary: meeting.result?.summary || '',
+                    action_items: meeting.result?.action_items || [],
+                    decisions: meeting.result?.decisions || [],
+                    raw: meeting.raw || '',
+                    meeting_id: meeting.id,
+                };
+                const result = await sendChatMessage(chatPayload);
+                reply = result.reply;
+            }
+            
             setMessages([...next, { role: 'assistant', content: reply }]);
         } catch (error) {
             console.error('Chat error:', error);
-            setMessages([...next, { role: 'assistant', content: `Error: ${error.message || 'Something went wrong. Please try again.'}` }]);
+            
+            // Final fallback: use local logic even if API fails
+            try {
+                const fallbackReply = generateLocalResponse(userMsg.content, meeting);
+                setMessages([...next, { role: 'assistant', content: fallbackReply }]);
+            } catch (fallbackError) {
+                setMessages([...next, { role: 'assistant', content: `Error: ${error.message || 'Something went wrong. Please try again.'}` }]);
+            }
         } finally {
             setLoading(false);
         }
